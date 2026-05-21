@@ -1,0 +1,12 @@
+{
+  "name": "mhp-market-research",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private MHP market research dashboard for Michael Pansolini",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "healthcheck": "node server.js --healthcheck"
+  },
+  "dependencies": {}
+}

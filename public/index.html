@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MHP Market Research</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Private tool</p>
+        <h1>MHP Market Research</h1>
+        <p class="muted">Address-first market screening. Saved reports. Manual updates only to control spend.</p>
+      </div>
+      <button id="refreshList" class="secondary">Refresh List</button>
+    </header>
+
+    <section class="card">
+      <h2>Research a new market</h2>
+      <form id="newMarketForm" class="grid-form">
+        <label>Deal / market name <input name="name" placeholder="Optional, e.g. Apple Eye Acres" /></label>
+        <label class="address-label">Specific address <input id="addressInput" name="address" required autocomplete="off" placeholder="123 Main St, City, ST" /><div id="addressSuggestions" class="suggestions" hidden></div></label>
+        <label>Radius miles <input name="radiusMiles" type="number" min="1" max="100" value="30" /></label>
+        <button type="submit">Create Market</button>
+      </form>
+    </section>
+
+    <section class="layout">
+      <aside class="card list-card">
+        <h2>Previous markets</h2>
+        <div id="marketsList" class="markets-list"></div>
+      </aside>
+      <section class="card report-card">
+        <div id="reportEmpty" class="empty">Select a market, or create one above.</div>
+        <div id="report" hidden>
+          <div class="report-head">
+            <div>
+              <p class="eyebrow" id="reportStatus"></p>
+              <h2 id="reportName"></h2>
+              <p id="reportAddress" class="muted"></p>
+            </div>
+            <button id="updateMarket">Update Data</button>
+          </div>
+          <div id="geoSummary" class="chips"></div>
+          <h3>Comparison table</h3>
+          <div class="table-wrap"><table id="comparisonTable"></table></div>
+          <h3>Coming next</h3>
+          <ul class="roadmap">
+            <li>HUD Fair Market Rent / Section 8 values</li>
+            <li>10-year population trend by year</li>
+            <li>Apify rental listing pull, no headless browser</li>
+            <li>Major employers within selected radius</li>
+            <li>Crime statistics</li>
+            <li>Map layer last: Walmart, groceries, employers</li>
+          </ul>
+          <h3>Sources</h3>
+          <div id="sources" class="sources"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
