@@ -53,7 +53,6 @@ if (process.argv.includes('--healthcheck')) {
 }
 
 const PORT = Number(process.env.PORT || 5317);
-const AUTH_USERNAME = process.env.MARKET_APP_USERNAME || 'michael';
 const PASSWORD = process.env.MARKET_APP_PASSWORD || '';
 const DATA_FILE = path.join(__dirname, 'data', 'markets.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -86,7 +85,7 @@ function authed(req) {
   const h = req.headers.authorization || '';
   if (!h.startsWith('Basic ')) return false;
   const decoded = Buffer.from(h.slice(6), 'base64').toString('utf8');
-  return decoded === `${AUTH_USERNAME}:${PASSWORD}`;
+  return decoded === `michael:${PASSWORD}`;
 }
 function slugId(address) {
   const slug = address.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'market';
@@ -133,7 +132,7 @@ async function geocodeAddress(address) {
     state: state && { name: state.NAME, code: state.STATE },
     county: county && { name: county.NAME, code: county.COUNTY, fullCode: `${county.STATE}${county.COUNTY}` },
     city: place && { name: place.NAME, code: place.PLACE },
-    tract: tract && { name: tract.NAME, code: tract.TRACT },
+    tract: tract && { name: tract.NAME, code: tract.TRACT, countyCode: tract.COUNTY, stateCode: tract.STATE },
     zcta: zcta
       ? { name: zcta.NAME, code: zcta.ZCTA5 || zcta.ZCTA5CE20, source: 'Census Geocoder' }
       : (googlePostalCode ? { name: googlePostalCode, code: googlePostalCode, source: 'Google Geocoding postal_code used as Census ZCTA' } : null)
@@ -186,6 +185,7 @@ async function getAcsComparison(geo) {
   if (geo.county?.code && geo.state?.code) levels.push(['County', acsUrl(`county:${geo.county.code}`, `state:${geo.state.code}`)]);
   if (geo.city?.code && geo.state?.code) levels.push(['City/Place', acsUrl(`place:${geo.city.code}`, `state:${geo.state.code}`)]);
   if (geo.zcta?.code) levels.push(['ZIP/ZCTA', acsUrl(`zip code tabulation area:${geo.zcta.code}`)]);
+  if (geo.tract?.code && geo.county?.code && geo.state?.code) levels.push(['Census Tract', acsUrl(`tract:${geo.tract.code}`, `state:${geo.state.code} county:${geo.county.code}`)]);
   const out = [];
   for (const [level, url] of levels) {
     try { out.push({ level, ...(parseAcsTable(await fetchJson(url)) || {}), source: 'Census ACS 5-Year 2022' }); }
