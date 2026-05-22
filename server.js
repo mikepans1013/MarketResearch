@@ -53,14 +53,40 @@ if (process.argv.includes('--healthcheck')) {
 }
 
 const PORT = Number(process.env.PORT || 5317);
+const AUTH_USERNAME = process.env.MARKET_APP_USERNAME || 'michael';
 const PASSWORD = process.env.MARKET_APP_PASSWORD || '';
 const DATA_FILE = path.join(__dirname, 'data', 'markets.json');
+const FMR_INDEX_FILE = path.join(__dirname, 'data', 'hud-fmr', 'fmr-index.json');
+let fmrIndexCache = null;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const CENSUS_API_KEY = process.env.CENSUS_API_KEY || '';
 function loadGooglePlacesKey() {
   return process.env.GOOGLE_PLACES_API_KEY || '';
 }
 const GOOGLE_PLACES_API_KEY = loadGooglePlacesKey();
+
+
+function loadFmrIndex() {
+  if (fmrIndexCache) return fmrIndexCache;
+  if (!fs.existsSync(FMR_INDEX_FILE)) return null;
+  fmrIndexCache = JSON.parse(fs.readFileSync(FMR_INDEX_FILE, 'utf8'));
+  return fmrIndexCache;
+}
+function getHudFmrRows(geo) {
+  const index = loadFmrIndex();
+  if (!index?.years) return [];
+  const countyFips = geo?.county?.fullCode || (geo?.state?.code && geo?.county?.code ? `${geo.state.code}${geo.county.code}` : null);
+  const zcta = geo?.zcta?.code;
+  const rows = [];
+  for (const year of Object.keys(index.years).sort((a,b)=>Number(b)-Number(a))) {
+    const data = index.years[year];
+    const county = countyFips ? data.countyByFips?.[countyFips] : null;
+    const safmr = zcta ? data.safmrByZip?.[zcta] : null;
+    if (county) rows.push({ ...county, year: Number(year), geography: county.countyName || county.hudAreaName, sourceFile: data.countyFile, sourceUrl: data.countyUrl });
+    if (safmr) rows.push({ ...safmr, year: Number(year), geography: `ZIP/ZCTA ${zcta}`, sourceFile: data.safmrFile, sourceUrl: data.safmrUrl });
+  }
+  return rows;
+}
 
 function ensureStore() {
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
@@ -85,7 +111,7 @@ function authed(req) {
   const h = req.headers.authorization || '';
   if (!h.startsWith('Basic ')) return false;
   const decoded = Buffer.from(h.slice(6), 'base64').toString('utf8');
-  return decoded === `michael:${PASSWORD}`;
+  return decoded === `${AUTH_USERNAME}:${PASSWORD}`;
 }
 function slugId(address) {
   const slug = address.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'market';
@@ -196,12 +222,15 @@ async function getAcsComparison(geo) {
 async function updateMarket(market) {
   const geo = await geocodeAddress(market.address);
   const comparison = await getAcsComparison(geo);
+  const rents = getHudFmrRows(geo);
   market.geo = geo;
   market.comparison = comparison;
+  market.rents = rents;
   market.sources = [
     { name: 'US Census Geocoder', url: 'https://geocoding.geo.census.gov/', updatedAt: new Date().toISOString() },
     ...(geo.zcta?.source?.startsWith('Google') ? [{ name: 'Google Geocoding API', url: 'https://developers.google.com/maps/documentation/geocoding', updatedAt: new Date().toISOString() }] : []),
-    { name: 'US Census ACS 5-Year 2022', url: 'https://api.census.gov/data/2022/acs/acs5', updatedAt: new Date().toISOString() }
+    { name: 'US Census ACS 5-Year 2022', url: 'https://api.census.gov/data/2022/acs/acs5', updatedAt: new Date().toISOString() },
+    ...(market.rents?.length ? [{ name: 'HUD Fair Market Rents / Small Area FMRs FY2024-FY2026', url: 'https://www.huduser.gov/portal/datasets/fmr.html', updatedAt: new Date().toISOString() }] : [])
   ];
   market.dataStatus = 'fresh';
   market.lastUpdatedAt = new Date().toISOString();

@@ -10,17 +10,12 @@ Private dashboard for screening mobile home park markets by address. The app is 
 - Configurable radius, default 30 miles
 - Address autocomplete via Google Places API
 - Census geocoder integration
-- Census ACS comparison table for:
-  - National
-  - State
-  - County
-  - City/place, when available
-  - ZIP/ZCTA, when available
+- Census ACS comparison table for national, state, county, city/place, ZIP/ZCTA, and census tract when available
+- HUD Fair Market Rents table with FY2026, FY2025, and FY2024 county/metro FMRs plus ZIP-level Small Area FMRs where available
 - Local JSON persistence for MVP simplicity
 
 ## Planned Features
 
-- HUD Fair Market Rent / SAFMR values for Section 8 rent estimates
 - 10-year population growth by year
 - Forecasted population growth
 - Apify-powered rental listing pulls, using API calls only, no local headless browser
@@ -30,17 +25,30 @@ Private dashboard for screening mobile home park markets by address. The app is 
 
 ## Data Source Notes
 
+### Census
+
 - Census does not provide true USPS ZIP-code geography. It provides **ZCTA** data, which approximates ZIP codes. The UI labels this as `ZIP/ZCTA`.
 - Some postal ZIPs do not have ZCTA ACS data, especially non-residential/special-use ZIPs.
-- Free sources are favored first. Paid APIs should be added only when free data is too weak.
+- Census tract is often more useful than city/town data for rural or unincorporated mobile home park locations.
+
+### HUD Fair Market Rents
+
+The repo includes the complete HUD source XLSX datasets used by the app under `data/hud-fmr/`:
+
+- `FY26_FMRs_revised.xlsx`
+- `fy2026_safmrs_revised.xlsx`
+- `FY25_FMRs_revised.xlsx`
+- `fy2025_safmrs_revised.xlsx`
+- `FY24_FMRs.xlsx`
+- `fy2024_safmrs.xlsx`
+
+The generated `data/hud-fmr/fmr-index.json` is a lookup index derived from those files so the Node app can read HUD rents without Excel parsing dependencies at runtime.
 
 ## Requirements
 
 - Node.js 20+
 - Free Census API key: <https://api.census.gov/data/key_signup.html>
-- Google Maps Platform key with:
-  - Places API enabled
-  - Geocoding API enabled
+- Google Maps Platform key with Places API and Geocoding API enabled
 
 ## Setup
 
@@ -75,8 +83,6 @@ Open:
 http://127.0.0.1:5317
 ```
 
-If `MARKET_APP_PASSWORD` is set, use basic auth with `MARKET_APP_USERNAME` and `MARKET_APP_PASSWORD`.
-
 ## Healthcheck
 
 ```bash
@@ -92,45 +98,11 @@ curl -u "$MARKET_APP_USERNAME:$MARKET_APP_PASSWORD" http://127.0.0.1:5317/health
 
 ## Deployment
 
-This is a plain Node HTTP server. You can deploy it behind any reverse proxy or tunnel:
-
-- Cloudflare Tunnel
-- Nginx
-- Caddy
-- Vercel/Render/Railway/Fly.io with minor adaptation
-- A systemd service on a VPS
-
-### Example Cloudflare Tunnel ingress
-
-```yaml
-ingress:
-  - hostname: markets.example.com
-    service: http://127.0.0.1:5317
-  - service: http_status:404
-```
-
-### Example systemd user service
-
-```ini
-[Unit]
-Description=MHP Market Research App
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/path/to/MarketResearch
-EnvironmentFile=/path/to/MarketResearch/.env
-ExecStart=/usr/bin/node server.js
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-```
+This is a plain Node HTTP server. You can deploy it behind any reverse proxy or tunnel, including Cloudflare Tunnel, Nginx, Caddy, Render, Railway, Fly.io, or a systemd service on a VPS.
 
 ## Privacy / Secrets
 
-Do not commit `.env`, API keys, passwords, private URLs, or saved market data. This repo includes `.env.example` only.
+Do not commit `.env`, API keys, passwords, private URLs, or saved market reports. This repo includes `.env.example` only.
 
 ## Storage
 
