@@ -43,7 +43,7 @@ function setupAddressAutocomplete(){
     else if(e.key==='Escape'){ hideSuggestions(); return; }
     box.querySelectorAll('.suggestion').forEach((el,i)=>el.classList.toggle('active', i===activeSuggestion));
   });
-  document.addEventListener('click', e => { if(!e.target.closest('.address-label')) hideSuggestions(); });
+  document.addEventListener('click', e => { if(!e.target.closest('.address-label')) hideSuggestions(); if(!e.target.closest('.tipcell')) document.querySelectorAll('.tipbox').forEach(b=>b.hidden=true); });
 }
 
 const $ = id => document.getElementById(id);
@@ -68,8 +68,17 @@ function renderComparison(rows=[]){
     'Census Tract':'Small Census geography, usually 1,200-8,000 people. Often more useful than city/town for rural or unincorporated MHP locations.',
     'City/Place':'Census incorporated place. This can differ from the mailing city and may be unavailable for unincorporated areas.'
   };
-  const headerLabel=r=> tooltip[r.level] ? `<span class="tip" title="${escapeHtml(tooltip[r.level])}">${escapeHtml(r.level)} <span class="tipmark">?</span></span>` : escapeHtml(r.level);
-  $('comparisonTable').innerHTML = `<thead><tr><th>Metric</th>${rows.map(r=>`<th>${headerLabel(r)}</th>`).join('')}</tr><tr class="geo-name-row"><th>Geography</th>${rows.map(r=>`<th>${escapeHtml(r.name || 'Unavailable')}</th>`).join('')}</tr></thead><tbody>${metrics.slice(1).map(([name,fn])=>`<tr><td>${name}</td>${rows.map(r=>`<td>${r.error?'<span class="error">'+escapeHtml(r.error)+'</span>':fn(r)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  const headerLabel=(r,i)=> tooltip[r.level] ? `<button type="button" class="tip" data-tip-id="tip-${i}" aria-expanded="false">${escapeHtml(r.level)} <span class="tipmark">?</span></button><div id="tip-${i}" class="tipbox" hidden>${escapeHtml(tooltip[r.level])}</div>` : escapeHtml(r.level);
+  $('comparisonTable').innerHTML = `<thead><tr><th>Metric</th>${rows.map((r,i)=>`<th class="tipcell">${headerLabel(r,i)}</th>`).join('')}</tr><tr class="geo-name-row"><th>Geography</th>${rows.map(r=>`<th>${escapeHtml(r.name || 'Unavailable')}</th>`).join('')}</tr></thead><tbody>${metrics.slice(1).map(([name,fn])=>`<tr><td>${name}</td>${rows.map(r=>`<td>${r.error?'<span class="error">'+escapeHtml(r.error)+'</span>':fn(r)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  document.querySelectorAll('.tip').forEach(btn=>btn.onclick=(e)=>{
+    e.stopPropagation();
+    const box=$(btn.dataset.tipId);
+    const opening=box.hidden;
+    document.querySelectorAll('.tipbox').forEach(b=>b.hidden=true);
+    document.querySelectorAll('.tip').forEach(b=>b.setAttribute('aria-expanded','false'));
+    box.hidden=!opening;
+    btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+  });
 }
 async function loadMarket(id){ selectedId=id; await loadMarkets(); const m=await api('/api/markets/'+id); $('reportEmpty').hidden=true; $('report').hidden=false; $('reportName').textContent=m.name; $('reportAddress').textContent=`${m.address} • ${m.radiusMiles||30} mile radius`; $('reportStatus').textContent=statusText(m); $('geoSummary').innerHTML = m.geo ? [`Matched: ${m.geo.matchedAddress}`,`County: ${m.geo.county?.name||'n/a'}`,`City: ${m.geo.city?.name||'n/a'}`,`State: ${m.geo.state?.name||'n/a'}`,`ZCTA: ${m.geo.zcta?.code||'n/a'}`,`Tract: ${m.geo.tract?.name||m.geo.tract?.code||'n/a'}`].map(x=>`<span class="chip">${x}</span>`).join('') : '<span class="chip">Click Update Data to geocode and pull Census data</span>'; renderComparison(m.comparison||[]); $('sources').innerHTML=(m.sources||[]).map(s=>`<p><strong>${s.name}</strong> - ${new Date(s.updatedAt).toLocaleString()}<br><span class="muted">${s.url}</span></p>`).join('') || '<p>No sources yet.</p>'; }
 $('newMarketForm').onsubmit=async e=>{ e.preventDefault(); const fd=new FormData(e.target); const body=Object.fromEntries(fd.entries()); const m=await api('/api/markets',{method:'POST',body:JSON.stringify(body)}); e.target.reset(); e.target.radiusMiles.value=30; await loadMarket(m.id); };
