@@ -175,9 +175,9 @@ const ACS_VARS = {
   age65Plus: 'B01001_020E,B01001_021E,B01001_022E,B01001_023E,B01001_024E,B01001_025E,B01001_044E,B01001_045E,B01001_046E,B01001_047E,B01001_048E,B01001_049E'
 };
 const ACS_GET = ['NAME','B01003_001E','B19013_001E','B25077_001E','B25003_001E','B25003_002E','B25003_003E','B09001_001E','B01001_020E','B01001_021E','B01001_022E','B01001_023E','B01001_024E','B01001_025E','B01001_044E','B01001_045E','B01001_046E','B01001_047E','B01001_048E','B01001_049E'];
-function acsUrl(forClause, inClause = '') {
-  const url = new URL('https://api.census.gov/data/2022/acs/acs5');
-  url.searchParams.set('get', ACS_GET.join(','));
+function acsUrl(forClause, inClause = '', year = 2022, variables = ACS_GET) {
+  const url = new URL(`https://api.census.gov/data/${year}/acs/acs5`);
+  url.searchParams.set('get', variables.join(','));
   url.searchParams.set('for', forClause);
   if (inClause) url.searchParams.set('in', inClause);
   if (CENSUS_API_KEY) url.searchParams.set('key', CENSUS_API_KEY);
@@ -204,32 +204,88 @@ function parseAcsTable(rows) {
     raw: obj
   };
 }
-async function getAcsComparison(geo) {
+
+function getAcsGeoLevels(geo) {
   const levels = [];
-  levels.push(['National', acsUrl('us:1')]);
-  if (geo.state?.code) levels.push(['State', acsUrl(`state:${geo.state.code}`)]);
-  if (geo.county?.code && geo.state?.code) levels.push(['County', acsUrl(`county:${geo.county.code}`, `state:${geo.state.code}`)]);
-  if (geo.city?.code && geo.state?.code) levels.push(['City/Place', acsUrl(`place:${geo.city.code}`, `state:${geo.state.code}`)]);
-  if (geo.zcta?.code) levels.push(['ZIP/ZCTA', acsUrl(`zip code tabulation area:${geo.zcta.code}`)]);
-  if (geo.tract?.code && geo.county?.code && geo.state?.code) levels.push(['Census Tract', acsUrl(`tract:${geo.tract.code}`, `state:${geo.state.code} county:${geo.county.code}`)]);
+  levels.push({ level: 'National', forClause: 'us:1' });
+  if (geo.state?.code) levels.push({ level: 'State', forClause: `state:${geo.state.code}` });
+  if (geo.county?.code && geo.state?.code) levels.push({ level: 'County', forClause: `county:${geo.county.code}`, inClause: `state:${geo.state.code}` });
+  if (geo.city?.code && geo.state?.code) levels.push({ level: 'City/Place', forClause: `place:${geo.city.code}`, inClause: `state:${geo.state.code}` });
+  if (geo.zcta?.code) levels.push({ level: 'ZIP/ZCTA', forClause: `zip code tabulation area:${geo.zcta.code}`, inClause: geo.state?.code ? `state:${geo.state.code}` : '' });
+  if (geo.tract?.code && geo.county?.code && geo.state?.code) levels.push({ level: 'Census Tract', forClause: `tract:${geo.tract.code}`, inClause: `state:${geo.state.code} county:${geo.county.code}` });
+  return levels;
+}
+function parsePopulationTable(rows) {
+  if (!Array.isArray(rows) || rows.length < 2) throw new Error('No population data');
+  const header = rows[0];
+  const row = rows[1];
+  const obj = Object.fromEntries(header.map((h, i) => [h, row[i]]));
+  const population = Number(obj.B01003_001E);
+  return { name: obj.NAME, population: Number.isFinite(population) && population >= 0 ? population : null };
+}
+async function mapLimit(items, limit, worker) {
+  const out = new Array(items.length);
+  let next = 0;
+  async function run() {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await worker(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+  return out;
+}
+function summarizeTrend(points) {
+  const valid = points.filter(p => Number.isFinite(p.population) && p.population > 0).sort((a,b)=>a.year-b.year);
+  if (valid.length < 2) return { startYear: null, endYear: null, startPopulation: null, endPopulation: null, totalChange: null, cagr: null };
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  const span = last.year - first.year;
+  const totalChange = first.population ? (last.population - first.population) / first.population : null;
+  const cagr = span > 0 && first.population ? Math.pow(last.population / first.population, 1 / span) - 1 : null;
+  return { startYear: first.year, endYear: last.year, startPopulation: first.population, endPopulation: last.population, totalChange, cagr };
+}
+async function getPopulationTrends(geo) {
+  const years = Array.from({ length: 10 }, (_, i) => 2013 + i);
+  const levels = getAcsGeoLevels(geo);
+  return await mapLimit(levels, 3, async level => {
+    const points = await mapLimit(years, 3, async year => {
+      try {
+        const inClause = level.level === 'ZIP/ZCTA' && year >= 2020 ? '' : (level.inClause || '');
+        const parsed = parsePopulationTable(await fetchJson(acsUrl(level.forClause, inClause, year, ['NAME','B01003_001E'])));
+        return { year, population: parsed.population, name: parsed.name };
+      } catch (e) {
+        return { year, population: null, error: e.message };
+      }
+    });
+    const displayName = points.find(p => p.name)?.name || null;
+    return { level: level.level, name: displayName, years: points.map(({year,population,error})=>({year,population,error})), ...summarizeTrend(points), source: 'Census ACS 5-Year 2013-2022' };
+  });
+}
+
+async function getAcsComparison(geo) {
+  const levels = getAcsGeoLevels(geo);
   const out = [];
-  for (const [level, url] of levels) {
-    try { out.push({ level, ...(parseAcsTable(await fetchJson(url)) || {}), source: 'Census ACS 5-Year 2022' }); }
-    catch (e) { out.push({ level, error: e.message, source: 'Census ACS 5-Year 2022' }); }
+  for (const level of levels) {
+    try { out.push({ level: level.level, ...(parseAcsTable(await fetchJson(acsUrl(level.forClause, level.level === 'ZIP/ZCTA' ? '' : (level.inClause || '')))) || {}), source: 'Census ACS 5-Year 2022' }); }
+    catch (e) { out.push({ level: level.level, error: e.message, source: 'Census ACS 5-Year 2022' }); }
   }
   return out;
 }
 async function updateMarket(market) {
   const geo = await geocodeAddress(market.address);
   const comparison = await getAcsComparison(geo);
+  const populationTrends = await getPopulationTrends(geo);
   const rents = getHudFmrRows(geo);
   market.geo = geo;
   market.comparison = comparison;
+  market.populationTrends = populationTrends;
   market.rents = rents;
   market.sources = [
     { name: 'US Census Geocoder', url: 'https://geocoding.geo.census.gov/', updatedAt: new Date().toISOString() },
     ...(geo.zcta?.source?.startsWith('Google') ? [{ name: 'Google Geocoding API', url: 'https://developers.google.com/maps/documentation/geocoding', updatedAt: new Date().toISOString() }] : []),
     { name: 'US Census ACS 5-Year 2022', url: 'https://api.census.gov/data/2022/acs/acs5', updatedAt: new Date().toISOString() },
+    { name: 'US Census ACS 5-Year Population Trends 2013-2022', url: 'https://api.census.gov/data.html', updatedAt: new Date().toISOString() },
     ...(market.rents?.length ? [{ name: 'HUD Fair Market Rents / Small Area FMRs FY2024-FY2026', url: 'https://www.huduser.gov/portal/datasets/fmr.html', updatedAt: new Date().toISOString() }] : [])
   ];
   market.dataStatus = 'fresh';

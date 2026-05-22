@@ -80,6 +80,12 @@ function renderComparison(rows=[]){
     btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
   });
 }
+function renderPopulationTrends(rows=[]){
+  if(!rows.length){ $('populationTrendTable').innerHTML='<tbody><tr><td class="muted">No population trend yet. Click Update Data.</td></tr></tbody>'; return; }
+  const years=[2013,2014,2015,2016,2017,2018,2019,2020,2021,2022];
+  const popFor=(r,y)=>r.years?.find(p=>p.year===y)?.population;
+  $('populationTrendTable').innerHTML=`<thead><tr><th>Geography</th><th>Name</th>${years.map(y=>`<th>${y}</th>`).join('')}<th>Total change</th><th>CAGR</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.level)}</td><td>${escapeHtml(r.name||'n/a')}</td>${years.map(y=>`<td>${fmt(popFor(r,y)?.toLocaleString?.()||popFor(r,y))}</td>`).join('')}<td>${pct(r.totalChange)}</td><td>${pct(r.cagr)}</td></tr>`).join('')}</tbody>`;
+}
 function renderRents(rows=[]){
   if(!rows.length){ $('rentTable').innerHTML='<tbody><tr><td class="muted">No HUD FMR match yet. Click Update Data after geocoding a market.</td></tr></tbody>'; return; }
   const cols=[
@@ -88,7 +94,7 @@ function renderRents(rows=[]){
   ];
   $('rentTable').innerHTML=`<thead><tr>${cols.map(([h])=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(([,fn])=>`<td>${escapeHtml(fn(r) ?? 'n/a')}</td>`).join('')}</tr>`).join('')}</tbody>`;
 }
-async function loadMarket(id){ selectedId=id; await loadMarkets(); const m=await api('/api/markets/'+id); $('reportEmpty').hidden=true; $('report').hidden=false; $('reportName').textContent=m.name; $('reportAddress').textContent=`${m.address} • ${m.radiusMiles||30} mile radius`; $('reportStatus').textContent=statusText(m); $('geoSummary').innerHTML = m.geo ? [`Matched: ${m.geo.matchedAddress}`,`County: ${m.geo.county?.name||'n/a'}`,`City: ${m.geo.city?.name||'n/a'}`,`State: ${m.geo.state?.name||'n/a'}`,`ZCTA: ${m.geo.zcta?.code||'n/a'}`,`Tract: ${m.geo.tract?.name||m.geo.tract?.code||'n/a'}`].map(x=>`<span class="chip">${x}</span>`).join('') : '<span class="chip">Click Update Data to geocode and pull Census data</span>'; renderComparison(m.comparison||[]); renderRents(m.rents||[]); $('sources').innerHTML=(m.sources||[]).map(s=>`<p><strong>${s.name}</strong> - ${new Date(s.updatedAt).toLocaleString()}<br><span class="muted">${s.url}</span></p>`).join('') || '<p>No sources yet.</p>'; }
+async function loadMarket(id){ selectedId=id; await loadMarkets(); const m=await api('/api/markets/'+id); $('reportEmpty').hidden=true; $('report').hidden=false; $('reportName').textContent=m.name; $('reportAddress').textContent=`${m.address} • ${m.radiusMiles||30} mile radius`; $('reportStatus').textContent=statusText(m); $('geoSummary').innerHTML = m.geo ? [`Matched: ${m.geo.matchedAddress}`,`County: ${m.geo.county?.name||'n/a'}`,`City: ${m.geo.city?.name||'n/a'}`,`State: ${m.geo.state?.name||'n/a'}`,`ZCTA: ${m.geo.zcta?.code||'n/a'}`,`Tract: ${m.geo.tract?.name||m.geo.tract?.code||'n/a'}`].map(x=>`<span class="chip">${x}</span>`).join('') : '<span class="chip">Click Update Data to geocode and pull Census data</span>'; renderComparison(m.comparison||[]); renderPopulationTrends(m.populationTrends||[]); renderRents(m.rents||[]); $('sources').innerHTML=(m.sources||[]).map(s=>`<p><strong>${s.name}</strong> - ${new Date(s.updatedAt).toLocaleString()}<br><span class="muted">${s.url}</span></p>`).join('') || '<p>No sources yet.</p>'; }
 $('newMarketForm').onsubmit=async e=>{ e.preventDefault(); const fd=new FormData(e.target); const body=Object.fromEntries(fd.entries()); const m=await api('/api/markets',{method:'POST',body:JSON.stringify(body)}); e.target.reset(); e.target.radiusMiles.value=30; await loadMarket(m.id); };
 $('updateMarket').onclick=async()=>{ if(!selectedId) return; $('updateMarket').disabled=true; $('updateMarket').textContent='Updating...'; try{ await api(`/api/markets/${selectedId}/update`,{method:'POST'}); await loadMarket(selectedId); } catch(e){ alert(e.message); await loadMarket(selectedId); } finally{ $('updateMarket').disabled=false; $('updateMarket').textContent='Update Data'; } };
 $('refreshList').onclick=loadMarkets;

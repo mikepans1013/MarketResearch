@@ -11,12 +11,12 @@ Private dashboard for screening mobile home park markets by address. The app is 
 - Address autocomplete via Google Places API
 - Census geocoder integration
 - Census ACS comparison table for national, state, county, city/place, ZIP/ZCTA, and census tract when available
+- 10-year population trend table using Census ACS 5-year estimates, with total change and CAGR
 - HUD Fair Market Rents table with FY2026, FY2025, and FY2024 county/metro FMRs plus ZIP-level Small Area FMRs where available
 - Local JSON persistence for MVP simplicity
 
 ## Planned Features
 
-- 10-year population growth by year
 - Forecasted population growth
 - Apify-powered rental listing pulls, using API calls only, no local headless browser
 - Major employers within selected radius
