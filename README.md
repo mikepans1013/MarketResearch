@@ -13,6 +13,7 @@ Private dashboard for screening mobile home park markets by address. The app is 
 - Census ACS comparison table for national, state, county, city/place, ZIP/ZCTA, and census tract when available
 - 10-year population trend table using Census ACS 5-year estimates, with total change and CAGR
 - HUD Fair Market Rents table with FY2026, FY2025, and FY2024 county/metro FMRs plus ZIP-level Small Area FMRs where available
+- Local MHP map/table within the selected radius when `MHP_LIST_FILE` points to a private local workbook export
 - Local JSON persistence for MVP simplicity
 
 ## Planned Features
@@ -99,6 +100,10 @@ curl -u "$MARKET_APP_USERNAME:$MARKET_APP_PASSWORD" http://127.0.0.1:5317/health
 ## Deployment
 
 This is a plain Node HTTP server. You can deploy it behind any reverse proxy or tunnel, including Cloudflare Tunnel, Nginx, Caddy, Render, Railway, Fly.io, or a systemd service on a VPS.
+
+## Private MHP List Data
+
+The app can plot nearby mobile home parks from a private spreadsheet export if you set `MHP_LIST_FILE` to a local JSON file. The dataset itself is intentionally not included in this repo. Keep private data outside Git and point to it with an environment variable.
 
 ## Privacy / Secrets
 

@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MHP Market Research</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -59,12 +60,17 @@
             <li>Crime statistics</li>
             <li>Map layer last: Walmart, groceries, employers</li>
           </ul>
+          <h3>Local mobile home parks</h3>
+          <p class="muted small-note">MHPs from the private spreadsheet within the selected radius. Dataset is local only and not included in the public GitHub repo.</p>
+          <div id="mhpMap" class="map" hidden></div>
+          <div class="table-wrap"><table id="mhpTable"></table></div>
           <h3>Sources</h3>
           <div id="sources" class="sources"></div>
         </div>
       </section>
     </section>
   </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

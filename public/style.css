@@ -7,3 +7,4 @@
 .small-note{font-size:13px;margin-top:-4px}.table-wrap table td:nth-child(4){max-width:260px}
 #populationTrendTable th small{display:block;color:var(--muted);font-size:10px;line-height:1.25;text-transform:none;letter-spacing:0;margin-top:3px;max-width:150px}.summary-row td{background:#101720;font-weight:700}
 .divider-row td{background:#172033;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.08em;font-weight:800}
+.map{height:420px;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:12px 0;background:#0d1117}.leaflet-popup-content{color:#111}.leaflet-container{font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}.pin-subject{background:var(--accent);border:2px solid #07110a;border-radius:50%;width:16px;height:16px}.pin-mhp{background:var(--accent2);border:2px solid white;border-radius:50%;width:12px;height:12px}.mhp-count{color:var(--muted);font-size:13px;margin:6px 0 12px}

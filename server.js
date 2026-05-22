@@ -57,7 +57,9 @@ const AUTH_USERNAME = process.env.MARKET_APP_USERNAME || 'michael';
 const PASSWORD = process.env.MARKET_APP_PASSWORD || '';
 const DATA_FILE = path.join(__dirname, 'data', 'markets.json');
 const FMR_INDEX_FILE = path.join(__dirname, 'data', 'hud-fmr', 'fmr-index.json');
+const MHP_LIST_FILE = process.env.MHP_LIST_FILE || '';
 let fmrIndexCache = null;
+let mhpListCache = null;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const CENSUS_API_KEY = process.env.CENSUS_API_KEY || '';
 function loadGooglePlacesKey() {
@@ -94,6 +96,70 @@ function ensureStore() {
 }
 function readStore() { ensureStore(); return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
 function writeStore(store) { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); }
+
+function toRad(deg) { return deg * Math.PI / 180; }
+function distanceMiles(aLat, aLng, bLat, bLng) {
+  const R = 3958.7613;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const lat1 = toRad(aLat);
+  const lat2 = toRad(bLat);
+  const h = Math.sin(dLat/2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng/2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function subjectLatLng(geo) {
+  const c = geo?.coordinates || {};
+  const lat = Number(c.y ?? c.lat ?? c.latitude);
+  const lng = Number(c.x ?? c.lng ?? c.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+function loadMhpList() {
+  if (mhpListCache) return mhpListCache;
+  if (!MHP_LIST_FILE || !fs.existsSync(MHP_LIST_FILE)) return [];
+  const workbook = JSON.parse(fs.readFileSync(MHP_LIST_FILE, 'utf8'));
+  const sheet = workbook.sheets?.find(s => s.sheetTitle === 'Full List of MHPs In USA') || workbook.sheets?.[0];
+  const rows = sheet?.rows || [];
+  const header = rows[0] || [];
+  const idx = Object.fromEntries(header.map((h, i) => [String(h).toUpperCase(), i]));
+  const parks = [];
+  const seen = new Set();
+  for (const row of rows.slice(1)) {
+    const lat = Number(row[idx.LATITUDE]);
+    const lng = Number(row[idx.LONGITUDE]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const mhpId = String(row[idx.MHPID] || '').trim();
+    const key = mhpId || `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parks.push({
+      mhpId,
+      name: String(row[idx.NAME] || '').trim(),
+      address: String(row[idx.ADDRESS] || '').trim(),
+      city: String(row[idx.CITY] || '').trim(),
+      state: String(row[idx.STATE] || '').trim(),
+      zip: String(row[idx.ZIP] || '').trim(),
+      county: String(row[idx.COUNTY] || '').trim(),
+      phone: String(row[idx.TELEPHONE] || '').trim(),
+      type: String(row[idx.TYPE] || '').trim(),
+      status: String(row[idx.STATUS] || '').trim(),
+      source: String(row[idx.SOURCE] || '').trim(),
+      latitude: lat,
+      longitude: lng
+    });
+  }
+  mhpListCache = parks;
+  return mhpListCache;
+}
+function getNearbyMhps(geo, radiusMiles = 30) {
+  const subject = subjectLatLng(geo);
+  if (!subject) return { subject: null, radiusMiles, parks: [], available: false };
+  const parks = loadMhpList()
+    .map(p => ({ ...p, distanceMiles: distanceMiles(subject.lat, subject.lng, p.latitude, p.longitude) }))
+    .filter(p => p.distanceMiles <= radiusMiles)
+    .sort((a,b) => a.distanceMiles - b.distanceMiles);
+  return { subject, radiusMiles, count: parks.length, parks, available: true };
+}
+
 function send(res, status, data, headers = {}) {
   const body = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
   res.writeHead(status, { 'Content-Type': typeof data === 'string' ? 'text/plain; charset=utf-8' : 'application/json; charset=utf-8', ...headers });
@@ -277,16 +343,19 @@ async function updateMarket(market) {
   const comparison = await getAcsComparison(geo);
   const populationTrends = await getPopulationTrends(geo);
   const rents = getHudFmrRows(geo);
+  const nearbyMhps = getNearbyMhps(geo, Number(market.radiusMiles || 30));
   market.geo = geo;
   market.comparison = comparison;
   market.populationTrends = populationTrends;
   market.rents = rents;
+  market.nearbyMhps = nearbyMhps;
   market.sources = [
     { name: 'US Census Geocoder', url: 'https://geocoding.geo.census.gov/', updatedAt: new Date().toISOString() },
     ...(geo.zcta?.source?.startsWith('Google') ? [{ name: 'Google Geocoding API', url: 'https://developers.google.com/maps/documentation/geocoding', updatedAt: new Date().toISOString() }] : []),
     { name: 'US Census ACS 5-Year 2022', url: 'https://api.census.gov/data/2022/acs/acs5', updatedAt: new Date().toISOString() },
     { name: 'US Census ACS 5-Year Population Trends 2013-2022', url: 'https://api.census.gov/data.html', updatedAt: new Date().toISOString() },
-    ...(market.rents?.length ? [{ name: 'HUD Fair Market Rents / Small Area FMRs FY2024-FY2026', url: 'https://www.huduser.gov/portal/datasets/fmr.html', updatedAt: new Date().toISOString() }] : [])
+    ...(market.rents?.length ? [{ name: 'HUD Fair Market Rents / Small Area FMRs FY2024-FY2026', url: 'https://www.huduser.gov/portal/datasets/fmr.html', updatedAt: new Date().toISOString() }] : []),
+    ...(market.nearbyMhps?.available ? [{ name: 'Local MHP list (private spreadsheet)', url: 'Local memory file - not included in public repo', updatedAt: new Date().toISOString() }] : [])
   ];
   market.dataStatus = 'fresh';
   market.lastUpdatedAt = new Date().toISOString();

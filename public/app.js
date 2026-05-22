@@ -107,7 +107,38 @@ function renderRents(rows=[]){
     btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
   });
 }
-async function loadMarket(id){ selectedId=id; await loadMarkets(); const m=await api('/api/markets/'+id); $('reportEmpty').hidden=true; $('report').hidden=false; $('reportName').textContent=m.name; $('reportAddress').textContent=`${m.address} • ${m.radiusMiles||30} mile radius`; $('reportStatus').textContent=statusText(m); $('geoSummary').innerHTML = m.geo ? [`Matched: ${m.geo.matchedAddress}`,`County: ${m.geo.county?.name||'n/a'}`,`City: ${m.geo.city?.name||'n/a'}`,`State: ${m.geo.state?.name||'n/a'}`,`ZCTA: ${m.geo.zcta?.code||'n/a'}`,`Tract: ${m.geo.tract?.name||m.geo.tract?.code||'n/a'}`].map(x=>`<span class="chip">${x}</span>`).join('') : '<span class="chip">Click Update Data to geocode and pull Census data</span>'; renderComparison(m.comparison||[]); renderPopulationTrends(m.populationTrends||[]); renderRents(m.rents||[]); $('sources').innerHTML=(m.sources||[]).map(s=>`<p><strong>${s.name}</strong> - ${new Date(s.updatedAt).toLocaleString()}<br><span class="muted">${s.url}</span></p>`).join('') || '<p>No sources yet.</p>'; }
+let mhpMap=null;
+let mhpLayer=null;
+function cleanText(v){ const s=String(v||'').trim(); return !s || s==='NOT AVAILABLE' ? '' : s; }
+function renderMhpMap(data){
+  const box=$('mhpMap');
+  const table=$('mhpTable');
+  if(!data?.available || !data.subject){ box.hidden=true; table.innerHTML='<tbody><tr><td class="muted">No map data yet. Click Update Data.</td></tr></tbody>'; return; }
+  const parks=data.parks||[];
+  box.hidden=false;
+  if(!window.L){ table.innerHTML='<tbody><tr><td class="muted">Map library did not load.</td></tr></tbody>'; return; }
+  if(!mhpMap){
+    mhpMap=L.map('mhpMap');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(mhpMap);
+    mhpLayer=L.layerGroup().addTo(mhpMap);
+  }
+  mhpLayer.clearLayers();
+  const subject=[data.subject.lat,data.subject.lng];
+  const bounds=[subject];
+  L.circle(subject,{radius:(data.radiusMiles||30)*1609.344,color:'#58a6ff',weight:1,fillOpacity:.04}).addTo(mhpLayer);
+  L.marker(subject,{title:'Subject property'}).bindPopup('<strong>Subject property</strong>').addTo(mhpLayer);
+  parks.forEach(p=>{
+    const ll=[p.latitude,p.longitude]; bounds.push(ll);
+    const title=cleanText(p.name)||'Mobile Home Park';
+    const addr=[cleanText(p.address),cleanText(p.city),cleanText(p.state),cleanText(p.zip)].filter(Boolean).join(', ');
+    L.circleMarker(ll,{radius:5,color:'#fff',weight:1,fillColor:'#58a6ff',fillOpacity:.9}).bindPopup(`<strong>${escapeHtml(title)}</strong><br>${escapeHtml(addr)}<br>${Number(p.distanceMiles).toFixed(1)} mi`).addTo(mhpLayer);
+  });
+  mhpMap.fitBounds(bounds,{padding:[30,30],maxZoom:12});
+  setTimeout(()=>mhpMap.invalidateSize(),50);
+  const shown=parks.slice(0,100);
+  table.innerHTML=`<caption class="mhp-count">${parks.length} MHPs found within ${data.radiusMiles||30} miles${parks.length>100?' - showing first 100 in table, all pins on map':''}</caption><thead><tr><th>Name</th><th>Address</th><th>Distance</th><th>Status</th><th>Phone</th></tr></thead><tbody>${shown.map(p=>{const name=cleanText(p.name)||'Not named'; const addr=[cleanText(p.address),cleanText(p.city),cleanText(p.state),cleanText(p.zip)].filter(Boolean).join(', '); return `<tr><td>${escapeHtml(name)}</td><td>${escapeHtml(addr)}</td><td>${Number(p.distanceMiles).toFixed(1)} mi</td><td>${escapeHtml(cleanText(p.status)||'n/a')}</td><td>${escapeHtml(cleanText(p.phone)||'n/a')}</td></tr>`}).join('')}</tbody>`;
+}
+async function loadMarket(id){ selectedId=id; await loadMarkets(); const m=await api('/api/markets/'+id); $('reportEmpty').hidden=true; $('report').hidden=false; $('reportName').textContent=m.name; $('reportAddress').textContent=`${m.address} • ${m.radiusMiles||30} mile radius`; $('reportStatus').textContent=statusText(m); $('geoSummary').innerHTML = m.geo ? [`Matched: ${m.geo.matchedAddress}`,`County: ${m.geo.county?.name||'n/a'}`,`City: ${m.geo.city?.name||'n/a'}`,`State: ${m.geo.state?.name||'n/a'}`,`ZCTA: ${m.geo.zcta?.code||'n/a'}`,`Tract: ${m.geo.tract?.name||m.geo.tract?.code||'n/a'}`].map(x=>`<span class="chip">${x}</span>`).join('') : '<span class="chip">Click Update Data to geocode and pull Census data</span>'; renderComparison(m.comparison||[]); renderPopulationTrends(m.populationTrends||[]); renderRents(m.rents||[]); renderMhpMap(m.nearbyMhps); $('sources').innerHTML=(m.sources||[]).map(s=>`<p><strong>${s.name}</strong> - ${new Date(s.updatedAt).toLocaleString()}<br><span class="muted">${s.url}</span></p>`).join('') || '<p>No sources yet.</p>'; }
 $('newMarketForm').onsubmit=async e=>{ e.preventDefault(); const fd=new FormData(e.target); const body=Object.fromEntries(fd.entries()); const m=await api('/api/markets',{method:'POST',body:JSON.stringify(body)}); e.target.reset(); e.target.radiusMiles.value=30; await loadMarket(m.id); };
 $('updateMarket').onclick=async()=>{ if(!selectedId) return; $('updateMarket').disabled=true; $('updateMarket').textContent='Updating...'; try{ await api(`/api/markets/${selectedId}/update`,{method:'POST'}); await loadMarket(selectedId); } catch(e){ alert(e.message); await loadMarket(selectedId); } finally{ $('updateMarket').disabled=false; $('updateMarket').textContent='Update Data'; } };
 $('refreshList').onclick=loadMarkets;
