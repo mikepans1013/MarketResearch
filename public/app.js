@@ -88,7 +88,7 @@ function renderPopulationTrends(rows=[]){
   const growth=(r,n)=>{ const latest=popFor(r,2022); const prior=popFor(r,2022-n); return latest&&prior ? (latest-prior)/prior : null; };
   const growthRows=[['1-year growth',1],['3-year growth',3],['5-year growth',5],['10-year growth',9]];
   const colLabel=r=>`<th><span>${escapeHtml(r.level)}</span><small>${escapeHtml(r.name||'')}</small></th>`;
-  $('populationTrendTable').innerHTML=`<thead><tr><th>Metric / Year</th>${rows.map(colLabel).join('')}</tr></thead><tbody>${growthRows.map(([label,n])=>`<tr class="summary-row"><td><strong>${label}</strong></td>${rows.map(r=>`<td>${pct(growth(r,n))}</td>`).join('')}</tr>`).join('')}<tr class="divider-row"><td colspan="${rows.length+1}">Annual population</td></tr>${years.map(y=>`<tr><td><strong>${y}</strong></td>${rows.map(r=>`<td>${compactPop(popFor(r,y))}</td>`).join('')}</tr>`).join('')}<tr class="summary-row"><td><strong>CAGR</strong></td>${rows.map(r=>`<td>${pct(r.cagr)}</td>`).join('')}</tr></tbody>`;
+  $('populationTrendTable').innerHTML=`<thead><tr><th>Metric / Year</th>${rows.map(colLabel).join('')}</tr></thead><tbody>${growthRows.map(([label,n])=>`<tr class="summary-row"><td><strong>${label}</strong></td>${rows.map(r=>`<td>${pct(growth(r,n))}</td>`).join('')}</tr>`).join('')}<tr class="divider-row"><td colspan="${rows.length+1}">Annual population</td></tr>${years.map(y=>`<tr><td><strong>${y}</strong></td>${rows.map(r=>`<td>${compactPop(popFor(r,y))}</td>`).join('')}</tr>`).join('')}</tbody>`;
 }
 function renderRents(rows=[]){
   if(!rows.length){ $('rentTable').innerHTML='<tbody><tr><td class="muted">No HUD FMR match yet. Click Update Data after geocoding a market.</td></tr></tbody>'; return; }
